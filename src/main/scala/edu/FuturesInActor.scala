@@ -15,9 +15,9 @@ class ActorWithFutures extends Actor {
 
   def receive: Receive = {
     case Foo =>
-      Thread.sleep(1000)
+      Thread.sleep(10000)
       Future {
-        Thread.sleep(1000)
+        Thread.sleep(10000)
         println("future stop")
       }
       println("receive stop")
@@ -25,13 +25,14 @@ class ActorWithFutures extends Actor {
 }
 
 object FuturesInActor {
+  lazy val actorSystem = ActorSystem("exp")
+
   def run() = {
-    val actorSystem = ActorSystem("exp")
     val actor = actorSystem.actorOf(ActorWithFutures.props())
     actor ! ActorWithFutures.Foo
     println("after send")
   }
 
-  //TODO stop everyting somehow
+  def stop() = actorSystem.terminate()
 }
 
