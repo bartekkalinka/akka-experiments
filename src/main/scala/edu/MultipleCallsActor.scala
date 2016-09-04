@@ -4,6 +4,7 @@ import akka.actor.{ActorLogging, ActorRef, FSM, Props}
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
 
 trait CallRequest {
   val id: Int
@@ -18,8 +19,8 @@ trait CallProducer {
 }
 
 object MultipleCallsActor {
-  def props(callProducer: CallProducer): Props =
-    Props(classOf[MultipleCallsActor], callProducer)
+  def props(callProducer: CallProducer, callsTimeout: FiniteDuration): Props =
+    Props(classOf[MultipleCallsActor], callProducer, callsTimeout)
 
   //received commands
   case class HandleCalls(calls: Seq[CallRequest])
@@ -27,10 +28,11 @@ object MultipleCallsActor {
   //sent responses
   case class HandleResponse(id: Int, response: CallResponse)
   case object ImBusy
+  case object CallsTimeout
 
   // states
   sealed trait State
-  case object Idle extends State
+  case object Ready extends State
   case object Busy extends State
 
   // data
@@ -39,14 +41,12 @@ object MultipleCallsActor {
   final case class CallResponses(target: ActorRef, targetIds: Set[Int], responses: Map[Int, CallResponse]) extends Data
 }
 
-class MultipleCallsActor(callProducer: CallProducer) extends FSM[MultipleCallsActor.State, MultipleCallsActor.Data] with ActorLogging {
+class MultipleCallsActor(callProducer: CallProducer, callsTimeout: FiniteDuration) extends FSM[MultipleCallsActor.State, MultipleCallsActor.Data] with ActorLogging {
   import MultipleCallsActor._
 
-  //TODO timeout for getting all responses
+  startWith(Ready, Uninitialized)
 
-  startWith(Idle, Uninitialized)
-
-  when(Idle) {
+  when(Ready) {
     case Event(HandleCalls(calls), Uninitialized) =>
       val intCallResponses = CallResponses(sender, calls.map(_.id).toSet, Map[Int, CallResponse]())
       Future.traverse(calls) { call =>
@@ -55,18 +55,21 @@ class MultipleCallsActor(callProducer: CallProducer) extends FSM[MultipleCallsAc
       goto(Busy) using intCallResponses
   }
 
-  when(Busy) {
+  when(Busy, stateTimeout = callsTimeout) {
     case Event(HandleResponse(id, response), CallResponses(target, targetIds, responses)) =>
       val newResponses = responses + (id -> response)
       if(newResponses.keys.toSet == targetIds) {
         target ! newResponses
-        goto(Idle) using Uninitialized
+        goto(Ready) using Uninitialized
       }
       else
         stay using CallResponses(target, targetIds, newResponses)
     case Event(HandleCalls(calls), callResponses) =>
       sender ! ImBusy
       stay using callResponses
+    case Event(StateTimeout, CallResponses(target, _, _)) =>
+      target ! CallsTimeout
+      goto(Ready) using Uninitialized
   }
 }
 
