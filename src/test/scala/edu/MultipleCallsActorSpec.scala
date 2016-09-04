@@ -37,9 +37,20 @@ class MultipleCallsActorSpec extends TestKit(ActorSystem("MultipleCallsActorSpec
     ))
   }
 
+  it should "handle correctly repeated use" in {
+    val calls: Seq[MyCallRequest] = Seq(MyCallRequest(1, "a"))
+    val multipleCallsActor = system.actorOf(MultipleCallsActor.props(callProducer))
+    multipleCallsActor ! HandleCalls(calls)
+    multipleCallsActor ! HandleResponse(1, MyCallResponse("q"))
+    expectMsg(Map[Int, CallResponse](1 -> MyCallResponse("q")))
+    multipleCallsActor ! HandleCalls(calls)
+    multipleCallsActor ! HandleResponse(1, MyCallResponse("p"))
+    expectMsg(Map[Int, CallResponse](1 -> MyCallResponse("p")))
+  }
+
   //TODO timeout for getting all responses
   //TODO busy state, so just one handle calls is processed at a time
-  //TODO correct handling of repeated use
   //TODO test that CallProducer.send is called
+  //TODO test incorrect ids in handle response
 }
 
