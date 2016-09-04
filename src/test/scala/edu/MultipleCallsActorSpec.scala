@@ -39,5 +39,7 @@ class MultipleCallsActorSpec extends TestKit(ActorSystem("MultipleCallsActorSpec
 
   //TODO timeout for getting all responses
   //TODO busy state, so just one handle calls is processed at a time
+  //TODO correct handling of repeated use
+  //TODO test that CallProducer.send is called
 }
 

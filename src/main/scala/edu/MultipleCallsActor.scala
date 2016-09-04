@@ -1,6 +1,6 @@
 package edu
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{ActorLogging, ActorRef, FSM, Props}
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -21,35 +21,52 @@ object MultipleCallsActor {
   def props(callProducer: CallProducer): Props =
     Props(classOf[MultipleCallsActor], callProducer)
 
+  //received commands
   case class HandleCalls(calls: Seq[CallRequest])
 
+  //sent responses
   case class HandleResponse(id: Int, response: CallResponse)
+  case object ImBusy
+
+  // states
+  sealed trait State
+  case object Idle extends State
+  case object Busy extends State
+
+  // data
+  sealed trait Data
+  case object Uninitialized extends Data
+  final case class CallResponses(target: ActorRef, targetIds: Set[Int], responses: Map[Int, CallResponse]) extends Data
 }
 
-class MultipleCallsActor(callProducer: CallProducer) extends Actor with ActorLogging {
+class MultipleCallsActor(callProducer: CallProducer) extends FSM[MultipleCallsActor.State, MultipleCallsActor.Data] with ActorLogging {
   import MultipleCallsActor._
 
-  val callResponses = scala.collection.mutable.Map[Int, CallResponse]()
-  var handleCallsSender: ActorRef = self
-  var callIds: Set[Int] = Set()
-
   //TODO timeout for getting all responses
-  //TODO busy state, so just one handle calls is processed at a time
 
-  def receive: Receive = {
-    case HandleCalls(calls) =>
-      handleCallsSender = sender
-      callIds = calls.map(_.id).toSet
-      log.info(s"callIds $callIds")
+  startWith(Idle, Uninitialized)
+
+  when(Idle) {
+    case Event(HandleCalls(calls), Uninitialized) =>
+      val intCallResponses = CallResponses(sender, calls.map(_.id).toSet, Map[Int, CallResponse]())
       Future.traverse(calls) { call =>
         callProducer.send(call)
       }
-    case HandleResponse(id, response) =>
-      callResponses.put(id, response)
-      log.info(s"callResponses.keys.toSet ${callResponses.keys.toSet}")
-      if(callResponses.keys.toSet == callIds) {
-        handleCallsSender ! callResponses.toMap
+      goto(Busy) using intCallResponses
+  }
+
+  when(Busy) {
+    case Event(HandleResponse(id, response), CallResponses(target, targetIds, responses)) =>
+      val newResponses = responses + (id -> response)
+      if(newResponses.keys.toSet == targetIds) {
+        target ! newResponses
+        goto(Idle) using Uninitialized
       }
+      else
+        stay using CallResponses(target, targetIds, newResponses)
+    case Event(HandleCalls(calls), callResponses) =>
+      sender ! ImBusy
+      stay using callResponses
   }
 }
 
