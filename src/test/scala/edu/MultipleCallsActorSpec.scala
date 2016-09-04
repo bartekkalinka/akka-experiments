@@ -48,8 +48,18 @@ class MultipleCallsActorSpec extends TestKit(ActorSystem("MultipleCallsActorSpec
     expectMsg(Map[Int, CallResponse](1 -> MyCallResponse("p")))
   }
 
+  it should "not accept second HandleCalls request before serving the first one" in {
+    val calls: Seq[MyCallRequest] = Seq(MyCallRequest(1, "a"))
+    val multipleCallsActor = system.actorOf(MultipleCallsActor.props(callProducer))
+    multipleCallsActor ! HandleCalls(calls)
+    val calls2: Seq[MyCallRequest] = Seq(MyCallRequest(3, "b"))
+    multipleCallsActor ! HandleCalls(calls2)
+    expectMsg(ImBusy)
+    multipleCallsActor ! HandleResponse(1, MyCallResponse("q"))
+    expectMsg(Map[Int, CallResponse](1 -> MyCallResponse("q")))
+  }
+
   //TODO timeout for getting all responses
-  //TODO busy state, so just one handle calls is processed at a time
   //TODO test that CallProducer.send is called
   //TODO test incorrect ids in handle response
 }
