@@ -8,11 +8,14 @@ object FindInSeqOfFutures {
 }
 
 case class FindInSeqOfFutures(seq: Seq[FindInSeqOfFutures.Input], call: FindInSeqOfFutures.Input => Future[Boolean]) {
-  def takeUntilTrue: Future[Seq[FindInSeqOfFutures.Input]] = {
-    val stream = seq.toStream
-    Future.sequence(stream.map(call)).map { results =>
-      results.zip(stream).takeWhile(_._1).map(_._2)
+  import FindInSeqOfFutures._
+
+  def takeUntilTrue: Future[Seq[Input]] = seq.foldLeft(Future.successful((true, Seq[Input]()))) {
+    case (accF, input) => accF.flatMap {
+      case (continue, acc) => if(continue) call(input).map((_, acc :+ input)) else Future.successful((continue, acc))
     }
+  }.map {
+    case (_, acc) => acc.init
   }
 }
 
