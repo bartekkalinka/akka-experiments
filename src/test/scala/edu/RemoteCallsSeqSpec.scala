@@ -5,7 +5,7 @@ import akka.testkit.{ImplicitSender, TestKit}
 import org.scalatest.{FlatSpecLike, Matchers}
 import akka.pattern.ask
 import akka.util.Timeout
-import edu.FindInSeqOfFutures.Input
+import edu.RemoteCallsSeq.Input
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -27,21 +27,20 @@ class CheckCallsActor extends Actor {
   }
 }
 
-class FindInSeqOfFuturesSpec extends TestKit(ActorSystem("FindInSeqOfFuturesSpec"))
+class RemoteCallsSeqSpec extends TestKit(ActorSystem("FindInSeqOfFuturesSpec"))
   with ImplicitSender
   with FlatSpecLike
   with Matchers {
 
-  import FindInSeqOfFutures._
+  import RemoteCallsSeq._
 
   implicit val timeout = Timeout(50.seconds)
 
-  //TODO does not pass
-  "FindInSeqOfFutures" should "call until first false and not more" in {
+  "RemoteCallsSeq" should "call until first false and not more" in {
     val checkCallsActor = system.actorOf(Props[CheckCallsActor], "checkCallsActor")
     val seq = Seq(1, 2, 3, 4, 5, 6, 7).map(Input)
     val func: Input => Future[Boolean] = { input: Input => (checkCallsActor ? Call(input)).mapTo[Boolean] }
-    val seqPrefixF = FindInSeqOfFutures(seq, func).takeUntilTrue
+    val seqPrefixF = RemoteCallsSeq(seq, func).takeWhileTrue
     Await.result(seqPrefixF.map { seqPrefix => seqPrefix.map(_.value).toList should be (Seq(1, 2, 3))}, Duration.Inf)
     Await.result((checkCallsActor ? GetCalls).map {
       case calls: Seq[Input] => calls.map(_.value) should be (Seq(1, 2, 3, 4))

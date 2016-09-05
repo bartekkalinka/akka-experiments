@@ -3,14 +3,14 @@ package edu
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
-object FindInSeqOfFutures {
+object RemoteCallsSeq {
   case class Input(value: Int)
 }
 
-case class FindInSeqOfFutures(seq: Seq[FindInSeqOfFutures.Input], call: FindInSeqOfFutures.Input => Future[Boolean]) {
-  import FindInSeqOfFutures._
+case class RemoteCallsSeq(seq: Seq[RemoteCallsSeq.Input], call: RemoteCallsSeq.Input => Future[Boolean]) {
+  import RemoteCallsSeq._
 
-  def takeUntilTrue: Future[Seq[Input]] = seq.foldLeft(Future.successful((true, Seq[Input]()))) {
+  def takeWhileTrue: Future[Seq[Input]] = seq.foldLeft(Future.successful((true, Seq[Input]()))) {
     case (accF, input) => accF.flatMap {
       case (continue, acc) => if(continue) call(input).map((_, acc :+ input)) else Future.successful((continue, acc))
     }
