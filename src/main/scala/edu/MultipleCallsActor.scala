@@ -48,11 +48,11 @@ class MultipleCallsActor(callProducer: CallProducer, callsTimeout: FiniteDuratio
 
   when(Ready) {
     case Event(HandleCalls(calls), Uninitialized) =>
-      val intCallResponses = CallResponses(sender, calls.map(_.id).toSet, Map[Int, CallResponse]())
+      val initCallResponses = CallResponses(sender, calls.map(_.id).toSet, Map[Int, CallResponse]())
       Future.traverse(calls) { call =>
         callProducer.send(call)
       }
-      goto(Busy) using intCallResponses
+      goto(Busy) using initCallResponses
   }
 
   when(Busy, stateTimeout = callsTimeout) {
